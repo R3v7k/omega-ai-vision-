@@ -15,17 +15,20 @@ export function EventLog() {
   useEffect(() => {
     if (!isCapturing) return;
 
-    // Listen to '*' to intercept EVERYTHING from the inference engine
-    const unsubTelemetry = eventBus.subscribe('*', (event: any) => {
-      // The wildcard publisher wraps data in { type, payload }
-      const payload = event.payload || event;
-      
-      // Robust Sniffing: Only render if it's a valid detection payload with targets
-      if (payload && Array.isArray(payload.detections) && payload.detections.length > 0) {
+    // Listen to 'TELEMETRY_EVENT' directly to ensure reliable capture
+    const unsubTelemetry = eventBus.subscribe('TELEMETRY_EVENT', (telemetryData: any) => {
+      console.group('Telemetry_Debug');
+      console.log('Received Telemetry Data:', telemetryData);
+      console.groupEnd();
+
+      // Robust Sniffing: Validate payload structure
+      if (telemetryData && Array.isArray(telemetryData.detections)) {
         setTelemetryLogs(prev => [
-          { id: Date.now() + Math.random(), timestamp: Date.now(), ...payload },
+          { id: Date.now() + Math.random(), timestamp: Date.now(), ...telemetryData },
           ...prev
         ].slice(0, 150)); // Keep a healthy buffer of the last 150 events
+      } else {
+        console.warn('Telemetry_Debug: Received event without valid detections array', telemetryData);
       }
     });
 

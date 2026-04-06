@@ -62,10 +62,10 @@ export function VisionProvider({ children }: { children: ReactNode }) {
   };
 
   const feeds = [
-    { id: "CAM_01", name: "Human Analytics", mp4Url: "/Human_Analytics.mp4", type: "HUMAN", skill: "Body Language & Emotion" },
-    { id: "CAM_02", name: "Animal Behavior", mp4Url: "/Animals.mp4", type: "ANIMAL", skill: "Species Tracking" },
-    { id: "CAM_03", name: "Urban Analytics", mp4Url: "/urban-traffic.mp4", type: "URBAN", skill: "Vehicles & Pedestrians" },
-    { id: "CAM_04", name: "Retail Analytics", mp4Url: "/Convenience_Store_Video_Generation.mp4", type: "RETAIL", skill: "Shopper Demographics" }
+    { id: "CAM_01", name: "Human Analytics", mp4Url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4", type: "HUMAN", skill: "Body Language & Emotion" },
+    { id: "CAM_02", name: "Animal Behavior", mp4Url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", type: "ANIMAL", skill: "Species Tracking" },
+    { id: "CAM_03", name: "Urban Analytics", mp4Url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4", type: "URBAN", skill: "Vehicles & Pedestrians" },
+    { id: "CAM_04", name: "Retail Analytics", mp4Url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4", type: "RETAIL", skill: "Shopper Demographics" }
   ];
 
   const dispatchTelemetry = (log: any) => {

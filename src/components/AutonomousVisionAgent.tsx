@@ -130,6 +130,14 @@ export function AutonomousVisionAgent({ feed, config, isPlaying, onPlay, onPause
         loop 
         playsInline 
         crossOrigin="anonymous" 
+        onError={() => {
+          console.error(`[SYSTEM_RECOVERY] Video source failed: ${feed.mp4Url}`);
+          eventBus.publish('TELEMETRY_EVENT', { 
+            sourceFeed: feed.name || 'Vision Node', 
+            detections: [],
+            message: 'System Recovery: Video source failed, attempting fallback.'
+          });
+        }}
       />
       
       <canvas 
