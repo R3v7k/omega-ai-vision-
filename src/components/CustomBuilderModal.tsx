@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
-import { X, Bot, Settings2, Activity, Play, AlertTriangle, RefreshCw } from 'lucide-react'; // INJECTED: RefreshCw
-import { eventBus } from '../lib/EventBus';
+import { X, Bot, Settings2, Activity, Play, AlertTriangle, RefreshCw, Download, Sparkles } from 'lucide-react';
 import { OmniMediaIngest } from './OmniMediaIngest';
 import { useVision } from '../context/VisionContext';
-import { parseVisionPrompt } from '../utils/nlpParser';
 import { AutonomousVisionAgent } from './AutonomousVisionAgent';
 import { VisionConfig } from '../lib/yolo';
 
@@ -19,6 +17,7 @@ export function CustomBuilderModal({ isOpen, onClose }: CustomBuilderModalProps)
   const [isPlaying, setIsPlaying] = useState(false);
   const [trackingGoals, setTrackingGoals] = useState('');
   const [visionConfig, setVisionConfig] = useState<any>(null);
+  const [isSynthesizing, setIsSynthesizing] = useState(false);
 
   const onEngineSwitch = (type: string) => {
     setEngineType(type);
@@ -29,7 +28,6 @@ export function CustomBuilderModal({ isOpen, onClose }: CustomBuilderModalProps)
     onClose();
   };
 
-  // NEW: Hard Reset for the Sandbox
   const handleReset = () => {
     setIsAnalysisStarted(false);
     setIsPlaying(false);
@@ -38,14 +36,55 @@ export function CustomBuilderModal({ isOpen, onClose }: CustomBuilderModalProps)
     setVisionConfig(null);
   };
 
-  const getTargetModelString = () => {
-    return engineType;
+  // --- SOVEREIGN ADDITION: TRUE AGNOSTIC NLP SYNTHESIZER ---
+  const generateAgentConfig = () => {
+    setIsSynthesizing(true);
+    
+    setTimeout(() => {
+      const lowerPrompt = trackingGoals.toLowerCase();
+      
+      // 1. Strip out conversational "stop words"
+      const stopWords = ['only', 'detect', 'track', 'find', 'show', 'me', 'the', 'a', 'an', 'and', 'or', 'ignore', 'all', 'in', 'scene'];
+      
+      // 2. Extract the raw nouns/targets dynamically
+      const targetClasses = lowerPrompt
+        .replace(/[.,?!]/g, '') // Remove punctuation
+        .split(' ')
+        .filter(word => word.trim().length > 2 && !stopWords.includes(word));
+
+      // 3. Compile the strict configuration
+      const finalConfig: VisionConfig = { 
+        targetModel: engineType, 
+        confidenceThreshold: 0.65, // Customizable
+        allowedClasses: targetClasses.length > 0 ? targetClasses : undefined,
+        ignoredClasses: [],
+        _timestamp: Date.now(), 
+        agentDirective: trackingGoals 
+      } as any;
+      
+      setVisionConfig(finalConfig);
+      setIsAnalysisStarted(true);
+      setIsPlaying(true);
+      setIsSynthesizing(false);
+    }, 800);
+  };
+
+  // --- SOVEREIGN ADDITION: EXPORT CONFIGURATION ---
+  const exportConfig = () => {
+    if (!visionConfig) return;
+    const blob = new Blob([JSON.stringify(visionConfig, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `OMEGA_AGENT_CONFIG_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 md:p-8">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-3 md:p-5">
       {/* Liquid Lava Lamp Background */}
       <div className="fixed inset-0 z-[-1] overflow-hidden" style={{ filter: 'blur(60px)' }}>
         <div className="absolute w-[60vw] h-[60vw] rounded-full bg-teal-500/40 animate-blob1" style={{ top: '10%', left: '10%' }} />
@@ -55,7 +94,7 @@ export function CustomBuilderModal({ isOpen, onClose }: CustomBuilderModalProps)
 
       {/* GlassWorkspaceContainer */}
       <div 
-        className="relative z-10 border border-white/10 overflow-hidden flex flex-col md:flex-row shadow-2xl transition-all duration-300 w-full h-full max-w-[1600px]"
+        className="relative z-10 border border-white/10 overflow-hidden flex flex-col md:flex-row shadow-2xl transition-all duration-300 w-full h-full"
         style={{
           borderRadius: '24px',
           background: 'rgba(10, 15, 30, 0.6)',
@@ -74,7 +113,6 @@ export function CustomBuilderModal({ isOpen, onClose }: CustomBuilderModalProps)
         {/* Left Pane: AI Guide & Controls */}
         <div className="w-full md:w-[400px] bg-black/40 border-r border-white/10 flex flex-col p-6 overflow-y-auto z-10 relative shrink-0">
           
-          {/* HEADER: Added Reset Button */}
           <div className="flex items-center justify-between mb-6 shrink-0">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-emerald-500/20 rounded-xl border border-emerald-500/30">
@@ -91,11 +129,12 @@ export function CustomBuilderModal({ isOpen, onClose }: CustomBuilderModalProps)
             </button>
           </div>
 
-          {/* Agentic Chat Window */}
           <div className="flex flex-col bg-slate-900/60 border border-white/5 rounded-xl shadow-inner shrink-0 mb-6 max-h-[350px]">
-            <div className="flex items-center gap-2 px-5 pt-5 pb-3 border-b border-white/5 shrink-0">
-              <Bot className="w-5 h-5 text-emerald-400" />
-              <span className="font-bold text-[0.85rem] uppercase tracking-[0.1em] text-emerald-400">Vision Guide</span>
+            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-white/5 shrink-0">
+              <div className="flex items-center gap-2">
+                <Bot className="w-5 h-5 text-emerald-400" />
+                <span className="font-bold text-[0.85rem] uppercase tracking-[0.1em] text-emerald-400">Vision Guide</span>
+              </div>
             </div>
             <div className="overflow-y-auto p-5 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
               <div className="text-white font-sans">
@@ -112,7 +151,7 @@ export function CustomBuilderModal({ isOpen, onClose }: CustomBuilderModalProps)
                 type="text" 
                 value={trackingGoals}
                 onChange={(e) => setTrackingGoals(e.target.value)}
-                placeholder="Describe your tracking goals..." 
+                placeholder="e.g., 'Detect laptops and phones'" 
                 className="w-full bg-slate-900 border border-slate-700/80 rounded-lg py-2.5 px-4 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/50 transition-colors"
               />
               <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-500/80 font-mono">
@@ -122,7 +161,6 @@ export function CustomBuilderModal({ isOpen, onClose }: CustomBuilderModalProps)
             </div>
           </div>
 
-          {/* Active Edge Models */}
           <div className="mb-4 shrink-0 space-y-3">
             <h3 className="text-sm font-semibold text-white flex items-center gap-2">
               <Activity className="w-4 h-4 text-emerald-400" />
@@ -141,7 +179,6 @@ export function CustomBuilderModal({ isOpen, onClose }: CustomBuilderModalProps)
             </div>
           </div>
 
-          {/* Pending Zero-Shot Bridge */}
           <div className="mb-6 shrink-0 space-y-3">
             <div className="grid grid-cols-1 gap-2">
               <button
@@ -154,46 +191,47 @@ export function CustomBuilderModal({ isOpen, onClose }: CustomBuilderModalProps)
             </div>
           </div>
 
-          {/* Media Ingestion */}
           <div className="shrink-0">
             <OmniMediaIngest onMediaReady={(url: string) => setMediaUrl(url)} />
           </div>
 
-          {/* Start / Update Vision Analysis Button */}
-          <button
-            // NEW LOGIC: Only disabled if no media. Unlocked for re-triggering.
-            disabled={!mediaUrl}
-            onClick={() => {
-              let finalConfig: VisionConfig = { 
-                targetModel: getTargetModelString(), 
-                confidenceThreshold: 0.5,
-                allowedClasses: [],
-                ignoredClasses: [],
-                // INJECTED: Unique timestamp forces the agent to completely remount and restart the video
-                _timestamp: Date.now() 
-              } as any;
-              
-              setVisionConfig(finalConfig);
-              setIsAnalysisStarted(true);
-              setIsPlaying(true);
-            }}
-            className={`w-full mt-6 py-4 rounded-xl font-bold text-[15px] shrink-0 transition-all duration-300 flex items-center justify-center gap-2
-              ${mediaUrl 
-                ? 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:-translate-y-1' 
-                : 'bg-slate-800/50 text-slate-500 cursor-not-allowed border border-slate-700/50'}`}
-          >
-            {isAnalysisStarted ? <RefreshCw className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-            {isAnalysisStarted ? 'Update Vision Analysis' : 'Start Vision Analysis'}
-          </button>
+          {/* SOVEREIGN UI FIX: The Heavyweight Action Deck */}
+          <div className="flex flex-col gap-3 mt-6 shrink-0">
+            <button
+              disabled={!mediaUrl || isSynthesizing}
+              onClick={generateAgentConfig}
+              className={`w-full py-4 rounded-xl font-bold text-[15px] transition-all duration-300 flex items-center justify-center gap-2
+                ${mediaUrl 
+                  ? 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:-translate-y-1' 
+                  : 'bg-slate-800/50 text-slate-500 cursor-not-allowed border border-slate-700/50'}`}
+            >
+              {isSynthesizing ? <Sparkles className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5" />}
+              {isSynthesizing ? 'Synthesizing Config...' : (isAnalysisStarted ? 'Update Vision Analysis' : 'Start Vision Analysis')}
+            </button>
+
+            {visionConfig && (
+              <button
+                onClick={exportConfig}
+                className="w-full py-3.5 rounded-xl font-bold text-sm bg-indigo-600 hover:bg-indigo-500 text-white shadow-[0_0_15px_rgba(79,70,229,0.4)] transition-all animate-in fade-in slide-in-from-top-2 flex items-center justify-center gap-2 border border-indigo-400/30"
+              >
+                <Download className="w-4 h-4" /> Export Agent Config (JSON)
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Right Pane: The Canvas */}
         <div className="flex-1 relative flex items-center justify-center p-4 md:p-8 z-10 overflow-hidden">
           {mediaUrl && isAnalysisStarted && visionConfig ? (
-            <div className="w-full max-w-5xl flex items-center justify-center animate-in fade-in duration-1000">
-               <div className="w-full">
+            <div className="w-full h-full flex items-center justify-center animate-in fade-in duration-1000 relative">
+               
+               <div className="absolute top-[-40px] left-0 z-50 flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded-md backdrop-blur-md">
+                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                 <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Isolated Sandbox Agent Running</span>
+               </div>
+
+               <div className="w-full h-full flex items-center justify-center">
                  <AutonomousVisionAgent 
-                   // NEW LOGIC: The timestamp key forces React to destroy the old agent and build a fresh one
                    key={visionConfig._timestamp || 'agent'}
                    feed={{ id: 'CUSTOM', name: 'Custom Builder Sandbox', mp4Url: mediaUrl, type: 'CUSTOM', skill: trackingGoals || 'Custom Analysis' }}
                    config={visionConfig}

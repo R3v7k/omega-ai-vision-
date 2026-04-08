@@ -104,6 +104,8 @@ In a production environment, Kubernetes (K8s) Pods are utilized to load-balance 
 │   │   (Git placeholder to preserve the public directory structure.)
 │   ├── Animals.mp4
 │   │   (Live RTSP stream asset for animal behavior tracking.)
+│   ├── Athletic_Movement_Tracking_Video_Generation.mp4
+│   │   (Live RTSP stream asset for athletic movement and pose tracking.)
 │   ├── Convenience_Store_Video_Generation.mp4
 │   │   (Live RTSP stream asset for retail analytics and shopper tracking.)
 │   ├── Human_Analytics.mp4
@@ -130,7 +132,7 @@ In a production environment, Kubernetes (K8s) Pods are utilized to load-balance 
     │   ├── AIAssistant.tsx
     │   │   (The NLP interface allowing users to query the Reasoning Core using natural language.)
     │   ├── AutonomousVisionAgent.tsx
-    │   │   (The Workhorse Agent component handling raw video ingestion, WebGL canvas rendering, and optimized edge-inference loops with background throttling.)
+    │   │   (The Workhorse Agent component handling raw video ingestion, WebGL canvas rendering, and optimized edge-inference loops with 17-point skeletal tracking.)
     │   ├── ChromiumWindow.tsx
     │   │   (A styled container component simulating a native OS window for dashboard modules.)
     │   ├── CustomBuilderModal.tsx
@@ -149,7 +151,7 @@ In a production environment, Kubernetes (K8s) Pods are utilized to load-balance 
     │   ├── ProDataContext.tsx
     │   │   (React Context managing the state of custom security rules and alert configurations.)
     │   └── VisionContext.tsx
-    │   │   (The central state repository managing active models, telemetry logs, and reasoning logs.)
+    │   │   (The central state repository managing active models, telemetry logs, reasoning logs, and camera feed configurations including athletic tracking.)
     ├── lib/
     │   ├── EventBus.js
     │   │   (A lightweight pub/sub event bus facilitating decoupled communication between AGI components.)

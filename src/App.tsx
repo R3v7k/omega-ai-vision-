@@ -85,12 +85,29 @@ export default function App() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-auto p-8">
-          <div className="max-w-7xl mx-auto">
-            {activeTab === "platform" && <LiveMonitor isBuilderOpen={isBuilderOpen} setIsBuilderOpen={setIsBuilderOpen} />}
-            {activeTab === "telemetry" && <EventLog />}
-            {activeTab === "models" && <ModelManager />}
-            {activeTab === "assistant" && <AIAssistant />}
+        {/* SOVEREIGN FIX: Expanded Viewport Padding */}
+        <div className="flex-1 overflow-auto p-4 md:p-8">
+          
+          {/* SOVEREIGN FIX: Expanded Viewport Dimensions */}
+          <div className="w-full max-w-[1800px] mx-auto h-full min-h-[85vh]">
+            
+            {/* SOVEREIGN FIX: Persistent Routing via CSS Hiding */}
+            <div className={activeTab === "platform" ? "block h-full" : "hidden"}>
+              <LiveMonitor isBuilderOpen={isBuilderOpen} setIsBuilderOpen={setIsBuilderOpen} />
+            </div>
+            
+            <div className={activeTab === "telemetry" ? "block h-full" : "hidden"}>
+              <EventLog />
+            </div>
+            
+            <div className={activeTab === "models" ? "block h-full" : "hidden"}>
+              <ModelManager />
+            </div>
+            
+            <div className={activeTab === "assistant" ? "block h-full" : "hidden"}>
+              <AIAssistant />
+            </div>
+
           </div>
         </div>
       </main>
