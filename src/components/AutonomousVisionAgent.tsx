@@ -5,6 +5,19 @@ import { loadModel, detectObjects } from '../lib/yolo';
 
 const SKELETON_CONNECTIONS = [[5, 6], [5, 7], [7, 9], [6, 8], [8, 10], [5, 11], [6, 12], [11, 12], [11, 13], [13, 15], [12, 14], [14, 16]];
 
+const getGestureIcon = (gesture: string) => {
+  switch(gesture) {
+    case '[WAVE]': return '👋';
+    case '[POINT]': return '👆';
+    case '[CELEBRATION]': return '🙌';
+    case '[JOY/LAUGHTER]': return '😄';
+    case '[AFRAID/ANXIOUS]': return '😨';
+    case '[ANGER/ANNOY]': return '😠';
+    case '[CALM]': return '😌';
+    default: return '';
+  }
+};
+
 // --- SOVEREIGN FIX: HONEST COLOR THEMING ---
 const getCanvasTheme = (feedId: string) => {
   if (feedId === 'NODE_CAM_01') return { stroke: '#a5b4fc', fill: 'rgba(30, 27, 75, 0.95)', mainText: '#a5b4fc' }; 
@@ -27,19 +40,22 @@ const derivePosturalState = (keypoints?: any[], track?: any): string => {
   const lHip = kp(11); const rHip = kp(12);
 
   // [WAVE]: Trigger if one wrist moves back-and-forth for more than 1 second within the shoulder bounding box.
-  if (track && track.waveCount >= 3) return '[WAVE]';
+  if (track && track.waveCount >= 4) return '[WAVE]';
 
   // [POINT]: Trigger if one wrist is elevated above the shoulder and the index finger (keypoint 9 or 10) is extended more than 10 pixels from the palm.
   // Note: Using elbow (7/8) as palm proxy since COCO 17-keypoint doesn't have palm/fingers
   if (lWrist && lShoulder && lElbow) {
-    if (lWrist.y < lShoulder.y && Math.hypot(lWrist.x - lElbow.x, lWrist.y - lElbow.y) > 10) return '[POINT]';
+    if (lWrist.y < lShoulder.y && Math.hypot(lWrist.x - lElbow.x, lWrist.y - lElbow.y) > 35) return '[POINT]';
   }
   if (rWrist && rShoulder && rElbow) {
-    if (rWrist.y < rShoulder.y && Math.hypot(rWrist.x - rElbow.x, rWrist.y - rElbow.y) > 10) return '[POINT]';
+    if (rWrist.y < rShoulder.y && Math.hypot(rWrist.x - rElbow.x, rWrist.y - rElbow.y) > 35) return '[POINT]';
   }
 
   // [CELEBRATION]: Both wrists elevated > 1.5s with side-to-side oscillation
   if (track && track.isCelebrating) return '[CELEBRATION]';
+
+  // [CALM]: Standing still with arms relaxed at sides for > 3s
+  if (track && track.isCalm) return '[CALM]';
 
   // [JOY/LAUGHTER]: Wrists elevated above shoulders (Y-axis is inverted)
   if (lWrist && rWrist && lShoulder && rShoulder) {
@@ -74,6 +90,96 @@ const derivePosturalState = (keypoints?: any[], track?: any): string => {
   }
 
   return '[NEUTRAL]';
+};
+
+// --- SOVEREIGN FIX: AUDIO CUE SYNTHESIZER ---
+let sharedAudioCtx: AudioContext | null = null;
+
+const playGestureCue = (gesture: string) => {
+  try {
+    if (!sharedAudioCtx) {
+      sharedAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (sharedAudioCtx.state === 'suspended') sharedAudioCtx.resume();
+    
+    const osc = sharedAudioCtx.createOscillator();
+    const gain = sharedAudioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(sharedAudioCtx.destination);
+
+    const now = sharedAudioCtx.currentTime;
+    
+    switch(gesture) {
+      case '[WAVE]':
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.exponentialRampToValueAtTime(800, now + 0.3);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        osc.start(now);
+        osc.stop(now + 0.3);
+        break;
+      case '[POINT]':
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(1200, now);
+        gain.gain.setValueAtTime(0.05, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+        osc.start(now);
+        osc.stop(now + 0.1);
+        break;
+      case '[CELEBRATION]':
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(440, now);
+        osc.frequency.setValueAtTime(554.37, now + 0.1);
+        osc.frequency.setValueAtTime(659.25, now + 0.2);
+        osc.frequency.setValueAtTime(880, now + 0.3);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.5);
+        osc.start(now);
+        osc.stop(now + 0.5);
+        break;
+      case '[JOY/LAUGHTER]':
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, now);
+        osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
+        osc.frequency.setValueAtTime(600, now + 0.15);
+        osc.frequency.exponentialRampToValueAtTime(1200, now + 0.25);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.3);
+        osc.start(now);
+        osc.stop(now + 0.3);
+        break;
+      case '[AFRAID/ANXIOUS]':
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.linearRampToValueAtTime(140, now + 0.5);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.5);
+        osc.start(now);
+        osc.stop(now + 0.5);
+        break;
+      case '[ANGER/ANNOY]':
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(300, now);
+        osc.frequency.exponentialRampToValueAtTime(100, now + 0.3);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        osc.start(now);
+        osc.stop(now + 0.3);
+        break;
+      case '[CALM]':
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(300, now);
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.1, now + 0.5);
+        gain.gain.linearRampToValueAtTime(0, now + 1.0);
+        osc.start(now);
+        osc.stop(now + 1.0);
+        break;
+    }
+  } catch (e) {
+    console.warn("Audio cue failed", e);
+  }
 };
 
 // --- SOVEREIGN FIX: PHASE 3.5 O(1) OFFSCREEN CROP ---
@@ -236,7 +342,7 @@ export const AutonomousVisionAgent = memo(function AutonomousVisionAgent({ feed,
             let lastDir = 0;
             for (let i = 1; i < track.wristHistory.length; i++) {
               const dx = track.wristHistory[i].x - track.wristHistory[i-1].x;
-              if (Math.abs(dx) > 3) {
+              if (Math.abs(dx) > 8) {
                 const dir = Math.sign(dx);
                 if (lastDir !== 0 && dir !== lastDir) directionChanges++;
                 lastDir = dir;
@@ -244,7 +350,7 @@ export const AutonomousVisionAgent = memo(function AutonomousVisionAgent({ feed,
             }
             
             const historySpan = track.wristHistory.length > 0 ? now - track.wristHistory[0].time : 0;
-            track.waveCount = historySpan > 1000 ? directionChanges : 0;
+            track.waveCount = historySpan > 1200 ? directionChanges : 0;
 
             // --- CELEBRATION TRACKING ---
             if (!track.celebrationHistory) track.celebrationHistory = [];
@@ -269,7 +375,43 @@ export const AutonomousVisionAgent = memo(function AutonomousVisionAgent({ feed,
                 const rXs = recent.map((h: any) => h.rx);
                 const lDiff = Math.max(...lXs) - Math.min(...lXs);
                 const rDiff = Math.max(...rXs) - Math.min(...rXs);
-                if (lDiff >= 5 || rDiff >= 5) track.isCelebrating = true;
+                if (lDiff >= 15 || rDiff >= 15) track.isCelebrating = true;
+              }
+            }
+
+            // --- CALM TRACKING ---
+            if (!track.calmHistory) track.calmHistory = [];
+            let isCalmPose = false;
+            if (lWrist?.score > 0.3 && rWrist?.score > 0.3 && lShoulder?.score > 0.3 && rShoulder?.score > 0.3) {
+              const shoulderDistX = Math.abs(lShoulder.x - rShoulder.x) || 10;
+              const bodyCenterX = (lShoulder.x + rShoulder.x) / 2;
+              // Wrists below shoulders and close to body
+              if (lWrist.y > lShoulder.y && rWrist.y > rShoulder.y) {
+                if (Math.abs(lWrist.x - bodyCenterX) < shoulderDistX * 2.5 && Math.abs(rWrist.x - bodyCenterX) < shoulderDistX * 2.5) {
+                  isCalmPose = true;
+                }
+              }
+            }
+
+            if (isCalmPose) {
+              const [bx, by, bw, bh] = p.bbox;
+              track.calmHistory.push({ time: now, cx: bx + bw/2, cy: by + bh/2 });
+            } else {
+              track.calmHistory = [];
+            }
+
+            track.calmHistory = track.calmHistory.filter((h: any) => now - h.time <= 4000);
+            
+            track.isCalm = false;
+            const calmSpan = track.calmHistory.length > 0 ? now - track.calmHistory[0].time : 0;
+            if (calmSpan >= 3000) {
+              const cxs = track.calmHistory.map((h: any) => h.cx);
+              const cys = track.calmHistory.map((h: any) => h.cy);
+              const dx = Math.max(...cxs) - Math.min(...cxs);
+              const dy = Math.max(...cys) - Math.min(...cys);
+              // Standing still (center hasn't moved much)
+              if (dx < 50 && dy < 50) {
+                track.isCalm = true;
               }
             }
           }
@@ -467,7 +609,7 @@ export const AutonomousVisionAgent = memo(function AutonomousVisionAgent({ feed,
         
         // 2. RAW SKELETON (IF POSE DATA EXISTS)
         if (det.keypoints) {
-          ctx.strokeStyle = feed.id.includes('CAM_05') ? '#673AB7' : theme.stroke; 
+          ctx.strokeStyle = feed.id.includes('CAM_05') ? '#4057DE' : theme.stroke; 
           ctx.lineWidth = 1.5;
           SKELETON_CONNECTIONS.forEach(([i, j]) => {
             const p1 = det.keypoints[i]; const p2 = det.keypoints[j];
@@ -491,6 +633,19 @@ export const AutonomousVisionAgent = memo(function AutonomousVisionAgent({ feed,
             if (normalizedClass === 'person' || normalizedClass === 'athlete') {
               const posturalState = derivePosturalState(det.keypoints, det.track);
               labelMain = `HUMAN_NODE ${posturalState} [${confidence}%]`;
+              
+              if (det.track) {
+                if (det.track.lastPosturalState !== posturalState) {
+                  if (posturalState !== '[NEUTRAL]') {
+                    playGestureCue(posturalState);
+                    det.track.lastActiveGesture = posturalState;
+                    det.track.lastActiveGestureTime = now;
+                  }
+                  det.track.lastPosturalState = posturalState;
+                } else if (posturalState !== '[NEUTRAL]') {
+                  det.track.lastActiveGestureTime = now;
+                }
+              }
             }
           }
 
@@ -533,6 +688,34 @@ export const AutonomousVisionAgent = memo(function AutonomousVisionAgent({ feed,
           if (labelSub) {
             ctx.fillStyle = '#ffffff';
             ctx.fillText(labelSub, x + 6, labelY + 28);
+          }
+
+          // --- SOVEREIGN FIX: GESTURE OVERLAY (CAM_01) ---
+          if (feed.id.includes('CAM_01') && det.track && det.track.lastActiveGesture) {
+            const timeSince = now - (det.track.lastActiveGestureTime || 0);
+            if (timeSince < 2000) {
+              const icon = getGestureIcon(det.track.lastActiveGesture);
+              if (icon) {
+                ctx.font = '20px Arial';
+                const iconX = x + tw + 12 + 20;
+                const iconY = labelY + boxHeight / 2;
+                
+                ctx.fillStyle = theme.fill;
+                ctx.beginPath();
+                ctx.arc(iconX, iconY, 16, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.strokeStyle = theme.stroke;
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+                
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(icon, iconX, iconY + 2);
+                
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'alphabetic';
+              }
+            }
           }
       });
       frameId = requestAnimationFrame(loop);

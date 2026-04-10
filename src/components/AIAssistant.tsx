@@ -15,7 +15,7 @@ export function AIAssistant() {
   const [messages, setMessages] = useState<{ role: "user" | "ai"; text: string }[]>([
     {
       role: "ai",
-      text: "STATUS REPORT: OMEGA V10X2 CORE OPERATIONAL. Swarm telemetry is being routed into my context window. How shall I assist with your facility analytics today?",
+      text: "STATUS REPORT: OMEGA Ai Vision CORE OPERATIONAL. Swarm telemetry is being routed into my context window. How shall I assist with your facility analytics today?",
     },
   ]);
   const [input, setInput] = useState("");
@@ -90,7 +90,7 @@ export function AIAssistant() {
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } },
           },
-          systemInstruction: "You are OMEGA V10X2, the Sovereign AI Reasoning Core. You analyze multi-node telemetry, kinetic skeletons, and environmental anomalies. Be concise, professional, and architecturally precise.",
+          systemInstruction: "You are OMEGA Ai Vision, the Sovereign AI Reasoning Core. You analyze multi-node telemetry, kinetic skeletons, and environmental anomalies. Be concise, professional, and architecturally precise.",
         },
         callbacks: {
           onopen: () => {
@@ -252,7 +252,7 @@ export function AIAssistant() {
       }
 
       let config: any = {
-        systemInstruction: "You are OMEGA V10X2, the Sovereign AI Reasoning Core. You analyze multi-node telemetry, kinetic skeletons, and environmental anomalies. Be concise, professional, and architecturally precise.",
+        systemInstruction: "You are OMEGA Ai Vision, the Sovereign AI Reasoning Core. You analyze multi-node telemetry, kinetic skeletons, and environmental anomalies. Be concise, professional, and architecturally precise.",
       };
 
       if (model === "gemini-3.1-pro-preview" && !selectedVideo) {

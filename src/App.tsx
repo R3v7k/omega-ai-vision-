@@ -5,15 +5,17 @@ import { AIAssistant } from "./components/AIAssistant";
 import { ModelManager } from "./components/ModelManager";
 import { WebcamAIWindow } from "./components/WebcamAIWindow";
 import { VisionProvider } from "./context/VisionContext";
-import { Video, List, HardDrive, Sparkles, ShieldCheck, Camera, ExternalLink } from "lucide-react";
+import { BattlefieldProvider, useBattlefield } from "./BattlefieldProvider";
+import { Video, List, HardDrive, Sparkles, ShieldCheck, Camera, ExternalLink, Activity } from "lucide-react";
 
-export default function App() {
+const AppContent = () => {
   const [activeTab, setActiveTab] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get("tab") || "platform";
   });
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
   const [showWebcamModal, setShowWebcamModal] = useState(false);
+  const { launchBattlefield } = useBattlefield();
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -30,7 +32,6 @@ export default function App() {
   ];
 
   return (
-    <VisionProvider>
       <div className="min-h-screen bg-slate-900 font-sans text-slate-100 flex relative">
         
         {/* Cosmic Webcam Modal */}
@@ -104,7 +105,7 @@ export default function App() {
       <aside className="w-64 bg-slate-900/50 backdrop-blur-md border-r border-slate-800/50 flex flex-col shadow-sm z-10">
         <div className="h-16 flex items-center px-6 border-b border-slate-800/50">
           <ShieldCheck className="w-6 h-6 text-indigo-400 mr-2" />
-          <span className="font-bold text-lg tracking-tight text-white">OMEGA V10X2</span>
+          <span className="font-bold text-lg tracking-tight text-white">OMEGA Ai Vision</span>
         </div>
         
         <nav className="flex-1 p-4 space-y-1">
@@ -139,6 +140,17 @@ export default function App() {
               className="w-full py-2 bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-xs rounded-lg transition-all"
             >
               Launch Builder
+            </button>
+          </div>
+
+          <div className="mt-2 p-4 bg-slate-800/40 rounded-xl border border-cyan-500/20">
+            <h3 className="text-xs font-semibold text-cyan-400 uppercase tracking-wider mb-2">Swarm Intelligence</h3>
+            <button
+              onClick={launchBattlefield}
+              className="w-full py-2 bg-cyan-900/50 hover:bg-cyan-800 text-cyan-300 border border-cyan-500/30 font-bold text-xs rounded-lg transition-all flex items-center justify-center gap-2"
+            >
+              <Activity className="w-4 h-4" />
+              Live Battlefield
             </button>
           </div>
         </nav>
@@ -202,6 +214,15 @@ export default function App() {
         </div>
       </main>
     </div>
+  );
+};
+
+export default function App() {
+  return (
+    <VisionProvider>
+      <BattlefieldProvider>
+        <AppContent />
+      </BattlefieldProvider>
     </VisionProvider>
   );
 }
