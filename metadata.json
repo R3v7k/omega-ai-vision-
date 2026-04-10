@@ -1,5 +1,5 @@
 {
   "name": "OMEGA Ai Vision",
   "description": "Restore version point OMEGA V10X2: A monolithic agentic system for multi-video analytic and AI reasoning.",
-  "requestFramePermissions": ["camera"]
+  "requestFramePermissions": []
 }
