@@ -65,7 +65,7 @@ export function EventLog() {
       const time = format(new Date(event.timestamp), "HH:mm:ss.SSS");
       const detections = event.detections.map((d: any) => d.class).join(', ');
       const conf = event.detections.length > 0 
-        ? Math.round(event.detections.reduce((acc: number, d: any) => acc + d.conf, 0) / event.detections.length) + '%'
+        ? Math.round((event.detections.reduce((acc: number, d: any) => acc + d.conf, 0) / event.detections.length) * 100) + '%'
         : '0%';
       return [date, time, event.sourceFeed || 'SYS', `"${detections}"`, conf].join(',');
     });
@@ -145,7 +145,7 @@ export function EventLog() {
                 <td className="py-3 text-emerald-400">[{event.sourceFeed || 'FEED'}]</td>
                 <td className="py-3">{event.detections.map((d: any) => d.class).join(', ')}</td>
                 <td className="py-3 text-indigo-400 font-bold">
-                  {event.detections.length > 0 ? Math.round(event.detections.reduce((acc: number, d: any) => acc + d.conf, 0) / event.detections.length) : 0}%
+                  {event.detections.length > 0 ? Math.round((event.detections.reduce((acc: number, d: any) => acc + d.conf, 0) / event.detections.length) * 100) : 0}%
                 </td>
               </tr>
             ))}

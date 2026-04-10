@@ -83,14 +83,14 @@ export async function detectObjects(model: any, element: HTMLVideoElement, confi
     // ROUTE A: SKELETAL INFERENCE (17-Point)
     if (model.type === 'pose_engine') {
       const poses = await model.engine.estimatePoses(element);
-      return poses.map((pose: any) => ({
+      return poses.filter((pose: any) => pose.keypoints && pose.keypoints.length > 0).map((pose: any) => ({
         // Map pose to a bounding box for UI consistency
         bbox: [
           pose.keypoints[0].x - 50, 
           pose.keypoints[0].y - 50, 
           100, 200
         ],
-        class: "Athlete",
+        class: "Person",
         conf: pose.score,
         keypoints: pose.keypoints, // THE 17-POINT PAYLOAD
         engine: model.name

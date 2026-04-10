@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Sparkles, ShieldAlert, BarChart2, AlertTriangle, Clock, Video, Loader2 } from "lucide-react";
+import { Send, Bot, User, Sparkles, ShieldAlert, BarChart2, AlertTriangle, Clock, Video, Loader2, Mic, MicOff, Volume2, Zap, Brain, Radio } from "lucide-react";
 import { useVision } from "../context/VisionContext";
-import { GoogleGenAI, ThinkingLevel } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel, Modality } from "@google/genai";
 
 const QUICK_ACTIONS = [
   { label: "Kinetic Risk Assessment", icon: ShieldAlert, prompt: "Perform a kinetic risk assessment on the current athletic movement tracking." },
@@ -23,6 +23,14 @@ export function AIAssistant() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [selectedVideo, setSelectedVideo] = useState<{ file: File, base64: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const [mode, setMode] = useState<"standard" | "fast" | "thinking">("standard");
+  const [isRecording, setIsRecording] = useState(false);
+  const [isLiveActive, setIsLiveActive] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const liveSessionRef = useRef<any>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -31,6 +39,181 @@ export function AIAssistant() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, loading]);
+
+  const playPCM = (base64Audio: string) => {
+    if (!audioContextRef.current) return;
+    const binaryString = atob(base64Audio);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    const pcm16 = new Int16Array(bytes.buffer);
+    const audioBuffer = audioContextRef.current.createBuffer(1, pcm16.length, 24000);
+    const channelData = audioBuffer.getChannelData(0);
+    for (let i = 0; i < pcm16.length; i++) {
+      channelData[i] = pcm16[i] / 32768;
+    }
+    const source = audioContextRef.current.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(audioContextRef.current.destination);
+    source.start();
+  };
+
+  const toggleLiveSession = async () => {
+    if (isLiveActive) {
+      liveSessionRef.current?.close();
+      setIsLiveActive(false);
+      return;
+    }
+
+    try {
+      // @ts-ignore
+      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+      if (!apiKey) throw new Error("API_KEY_MISSING");
+
+      const ai = new GoogleGenAI({ apiKey });
+      
+      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+      
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+      const source = audioContext.createMediaStreamSource(stream);
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+      
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+
+      const sessionPromise = ai.live.connect({
+        model: "gemini-3.1-flash-live-preview",
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } },
+          },
+          systemInstruction: "You are OMEGA V10X2, the Sovereign AI Reasoning Core. You analyze multi-node telemetry, kinetic skeletons, and environmental anomalies. Be concise, professional, and architecturally precise.",
+        },
+        callbacks: {
+          onopen: () => {
+            setIsLiveActive(true);
+            processor.onaudioprocess = (e) => {
+              const inputData = e.inputBuffer.getChannelData(0);
+              const pcm16 = new Int16Array(inputData.length);
+              for (let i = 0; i < inputData.length; i++) {
+                pcm16[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32768));
+              }
+              const base64Data = btoa(String.fromCharCode(...new Uint8Array(pcm16.buffer)));
+              sessionPromise.then(session => {
+                session.sendRealtimeInput({
+                  audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+                });
+              });
+            };
+          },
+          onmessage: async (message: any) => {
+            const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
+            if (base64Audio) {
+              playPCM(base64Audio);
+            }
+          },
+          onclose: () => {
+            setIsLiveActive(false);
+            processor.disconnect();
+            source.disconnect();
+            stream.getTracks().forEach(t => t.stop());
+          }
+        }
+      });
+      
+      liveSessionRef.current = await sessionPromise;
+
+    } catch (error) {
+      console.error("Live session error", error);
+      setIsLiveActive(false);
+    }
+  };
+
+  const toggleRecording = async () => {
+    if (isRecording) {
+      mediaRecorderRef.current?.stop();
+      setIsRecording(false);
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        stream.getTracks().forEach(t => t.stop());
+        
+        setLoading(true);
+        try {
+          // @ts-ignore
+          const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+          const ai = new GoogleGenAI({ apiKey });
+          
+          const reader = new FileReader();
+          reader.readAsDataURL(audioBlob);
+          reader.onloadend = async () => {
+            const base64Data = (reader.result as string).split(',')[1];
+            const response = await ai.models.generateContent({
+              model: "gemini-3-flash-preview",
+              contents: [
+                { inlineData: { data: base64Data, mimeType: 'audio/webm' } },
+                "Transcribe this audio exactly. Do not add any other text."
+              ]
+            });
+            if (response.text) {
+              setInput(prev => prev + (prev ? " " : "") + response.text);
+            }
+            setLoading(false);
+          };
+        } catch (e) {
+          console.error(e);
+          setLoading(false);
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const playTTS = async (text: string) => {
+    try {
+      // @ts-ignore
+      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash-preview-tts",
+        contents: text,
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } }
+          }
+        }
+      });
+      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (base64Audio) {
+        if (!audioContextRef.current) {
+          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+        }
+        playPCM(base64Audio);
+      }
+    } catch (e) {
+      console.error("TTS error", e);
+    }
+  };
 
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -63,13 +246,17 @@ export function AIAssistant() {
       const ai = new GoogleGenAI({ apiKey });
       const lowerInput = textToSend.toLowerCase();
       let model = "gemini-3-flash-preview";
+      if (mode === "fast") model = "gemini-3.1-flash-lite-preview";
+      if (mode === "thinking" || selectedVideo || lowerInput.includes("analyze") || lowerInput.includes("kinetic") || lowerInput.includes("risk")) {
+        model = "gemini-3.1-pro-preview";
+      }
+
       let config: any = {
         systemInstruction: "You are OMEGA V10X2, the Sovereign AI Reasoning Core. You analyze multi-node telemetry, kinetic skeletons, and environmental anomalies. Be concise, professional, and architecturally precise.",
       };
 
-      if (selectedVideo || lowerInput.includes("analyze") || lowerInput.includes("kinetic") || lowerInput.includes("risk")) {
-        model = "gemini-3.1-pro-preview";
-        if (!selectedVideo) config.thinkingConfig = { thinkingLevel: ThinkingLevel.HIGH };
+      if (model === "gemini-3.1-pro-preview" && !selectedVideo) {
+        config.thinkingConfig = { thinkingLevel: ThinkingLevel.HIGH };
       }
 
       const skeletalNodes = telemetryLogs.filter(l => l.raw?.some((d: any) => d.keypoints));
@@ -200,11 +387,20 @@ INSTRUCTION: Analyze the following request against this live context.
               }`}>
                 {msg.role === "user" ? <User className="w-4 h-4 text-slate-300" /> : <Bot className="w-4 h-4" />}
               </div>
-              <div className={`max-w-[85%] rounded-2xl px-5 py-3.5 text-sm shadow-xl leading-relaxed backdrop-blur-md ${
+              <div className={`max-w-[85%] rounded-2xl px-5 py-3.5 text-sm shadow-xl leading-relaxed backdrop-blur-md relative group ${
                 msg.role === "user" 
                   ? "bg-indigo-600/80 text-white rounded-tr-none border border-indigo-500/30" 
                   : "bg-slate-900/60 border border-white/10 text-slate-100 rounded-tl-none"
               }`}>
+                {msg.role === "ai" && (
+                  <button 
+                    onClick={() => playTTS(msg.text)}
+                    className="absolute -right-10 top-2 p-1.5 bg-slate-800/80 text-slate-400 hover:text-indigo-400 hover:bg-slate-700 rounded-lg opacity-0 group-hover:opacity-100 transition-all border border-white/10"
+                    title="Read Aloud"
+                  >
+                    <Volume2 className="w-4 h-4" />
+                  </button>
+                )}
                 {msg.text.split('\n').map((line, i) => (
                   <p key={i} className="mb-2 last:mb-0 drop-shadow-sm">
                     {line.split(/(\*\*.*?\*\*)/g).map((part, j) => 
@@ -232,6 +428,36 @@ INSTRUCTION: Analyze the following request against this live context.
 
         {/* Input Deck */}
         <div className="p-5 bg-slate-900/50 backdrop-blur-xl border-t border-white/5 shrink-0">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <div className="flex gap-2">
+              <button
+                onClick={() => setMode("standard")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border ${mode === "standard" ? "bg-indigo-600/80 border-indigo-400 text-white shadow-[0_0_10px_rgba(79,70,229,0.5)]" : "bg-slate-900/60 border-white/10 text-slate-400 hover:text-white"}`}
+              >
+                <Bot className="w-3 h-3" /> Standard
+              </button>
+              <button
+                onClick={() => setMode("fast")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border ${mode === "fast" ? "bg-yellow-500/80 border-yellow-400 text-white shadow-[0_0_10px_rgba(234,179,8,0.5)]" : "bg-slate-900/60 border-white/10 text-slate-400 hover:text-white"}`}
+              >
+                <Zap className="w-3 h-3" /> Fast
+              </button>
+              <button
+                onClick={() => setMode("thinking")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border ${mode === "thinking" ? "bg-purple-600/80 border-purple-400 text-white shadow-[0_0_10px_rgba(147,51,234,0.5)]" : "bg-slate-900/60 border-white/10 text-slate-400 hover:text-white"}`}
+              >
+                <Brain className="w-3 h-3" /> Deep Think
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={toggleLiveSession}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border ${isLiveActive ? "bg-red-500/80 border-red-400 text-white shadow-[0_0_15px_rgba(239,68,68,0.6)] animate-pulse" : "bg-slate-900/60 border-white/10 text-slate-400 hover:text-white"}`}
+              >
+                <Radio className="w-3 h-3" /> {isLiveActive ? "Live Active" : "Start Live"}
+              </button>
+            </div>
+          </div>
           <div className="flex flex-wrap gap-2 mb-4">
             {QUICK_ACTIONS.map(action => (
               <button
@@ -251,8 +477,16 @@ INSTRUCTION: Analyze the following request against this live context.
             <button
               onClick={() => fileInputRef.current?.click()}
               className={`p-3.5 rounded-xl transition-all shadow-lg backdrop-blur-md ${selectedVideo ? 'bg-indigo-600 text-white animate-pulse border border-indigo-400/30' : 'bg-slate-900/80 text-slate-400 hover:bg-slate-800 hover:text-white border border-white/10'}`}
+              title="Upload Video for Analysis"
             >
               <Video className="w-5 h-5" />
+            </button>
+            <button
+              onClick={toggleRecording}
+              className={`p-3.5 rounded-xl transition-all shadow-lg backdrop-blur-md ${isRecording ? 'bg-red-500/80 text-white animate-pulse border border-red-400/50' : 'bg-slate-900/80 text-slate-400 hover:bg-slate-800 hover:text-white border border-white/10'}`}
+              title="Transcribe Audio"
+            >
+              {isRecording ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
             </button>
             <div className="relative flex-1">
               <input

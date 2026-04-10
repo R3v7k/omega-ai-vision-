@@ -3,8 +3,9 @@ import { EventLog } from "./components/EventLog";
 import { LiveMonitor } from "./components/LiveMonitor";
 import { AIAssistant } from "./components/AIAssistant";
 import { ModelManager } from "./components/ModelManager";
+import { WebcamAIWindow } from "./components/WebcamAIWindow";
 import { VisionProvider } from "./context/VisionContext";
-import { Video, List, HardDrive, Sparkles, ShieldCheck } from "lucide-react";
+import { Video, List, HardDrive, Sparkles, ShieldCheck, Camera } from "lucide-react";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("platform");
@@ -12,6 +13,7 @@ export default function App() {
 
   const tabs = [
     { id: "platform", label: "Platform Monitor", icon: Video },
+    { id: "webcam", label: "Live Webcam AI", icon: Camera },
     { id: "telemetry", label: "Telemetry Stream", icon: List },
     { id: "models", label: "Model Manager", icon: HardDrive },
     { id: "assistant", label: "AI Assistant", icon: Sparkles },
@@ -94,6 +96,10 @@ export default function App() {
             {/* SOVEREIGN FIX: Persistent Routing via CSS Hiding */}
             <div className={activeTab === "platform" ? "block h-full" : "hidden"}>
               <LiveMonitor isBuilderOpen={isBuilderOpen} setIsBuilderOpen={setIsBuilderOpen} />
+            </div>
+            
+            <div className={activeTab === "webcam" ? "block h-full" : "hidden"}>
+              <WebcamAIWindow />
             </div>
             
             <div className={activeTab === "telemetry" ? "block h-full" : "hidden"}>

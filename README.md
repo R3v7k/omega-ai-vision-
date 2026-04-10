@@ -81,8 +81,12 @@ In a production environment, Kubernetes (K8s) Pods are utilized to load-balance 
 
 ```text
 /
+├── .gitignore
+│   (Git ignore rules to exclude node_modules, build artifacts, and sensitive files.)
 ├── README.md
 │   (The Unabridged Master Blueprint & State Report documenting the Monolith AGI architecture.)
+├── VERSION.md
+│   (Version history and changelog documentation.)
 ├── index.html
 │   (The primary HTML entry point bootstrapping the React application and WebGL context.)
 ├── metadata.json
@@ -97,30 +101,10 @@ In a production environment, Kubernetes (K8s) Pods are utilized to load-balance 
 │   (Express/Node backend serving the deployment, handling static assets, and API routes.)
 ├── tsconfig.json
 │   (TypeScript compiler configuration enforcing strict type safety across the AGI codebase.)
+├── version.json
+│   (JSON file containing the current application version.)
 ├── vite.config.ts
 │   (Vite bundler configuration optimized for fast HMR and efficient production builds.)
-├── public/
-│   ├── .keep
-│   │   (Git placeholder to preserve the public directory structure.)
-│   ├── Animals.mp4
-│   │   (Live RTSP stream asset for animal behavior tracking.)
-│   ├── Athletic_Movement_Tracking_Video_Generation.mp4
-│   │   (Live RTSP stream asset for athletic movement and pose tracking.)
-│   ├── Convenience_Store_Video_Generation.mp4
-│   │   (Live RTSP stream asset for retail analytics and shopper tracking.)
-│   ├── Human_Analytics.mp4
-│   │   (Live RTSP stream asset for human demographic and mood analysis.)
-│   ├── README.md
-│   │   (Documentation for public assets and static file serving.)
-│   └── urban-traffic.mp4
-│   │   (Live RTSP stream asset for vehicle and pedestrian traffic flow.)
-├── tests/
-│   ├── test-cors.ts
-│   │   (Integration test suite verifying Cross-Origin Resource Sharing policies for secure API access.)
-│   ├── test-ts.ts
-│   │   (Unit test suite validating core TypeScript interfaces and type definitions.)
-│   └── test-vite.js
-│   │   (Build test suite ensuring Vite bundler pipeline integrity and asset optimization.)
 └── src/
     ├── App.tsx
     │   (The root React component orchestrating the layout, context providers, and primary UI views.)
@@ -141,17 +125,15 @@ In a production environment, Kubernetes (K8s) Pods are utilized to load-balance 
     │   │   (Real-time telemetry display component streaming live detection events from the edge.)
     │   ├── LiveMonitor.tsx
     │   │   (The primary command center rendering multiple AutonomousVisionAgents and aggregated stats.)
+    │   ├── ModelManager.tsx
+    │   │   (Component for managing and toggling the active state of various AI vision models.)
     │   ├── OmniMediaIngest.tsx
     │   │   (Component handling local file uploads and transcoding for custom video analysis.)
-    │   ├── ReasoningCore.tsx
-    │   │   (Advanced analytics view visualizing cross-node correlations and historical telemetry data.)
-    │   └── RuleBuilderModal.tsx
-    │   │   (Interface for defining custom security rules and alerts based on live inference data.)
+    │   └── WebcamAIWindow.tsx
+    │   │   (Component for live webcam analysis, integrating with AutonomousVisionAgent for real-time processing.)
     ├── context/
-    │   ├── ProDataContext.tsx
-    │   │   (React Context managing the state of custom security rules and alert configurations.)
     │   └── VisionContext.tsx
-    │   │   (The central state repository managing active models, telemetry logs, reasoning logs, and camera feed configurations including athletic tracking.)
+    │       (The central state repository managing active models, telemetry logs, reasoning logs, and camera feed configurations including athletic tracking.)
     ├── lib/
     │   ├── EventBus.js
     │   │   (A lightweight pub/sub event bus facilitating decoupled communication between AGI components.)
@@ -162,7 +144,7 @@ In a production environment, Kubernetes (K8s) Pods are utilized to load-balance 
     │   ├── utils.ts
     │   │   (General-purpose utility functions, including Tailwind class merging and formatting helpers.)
     │   └── yolo.ts
-    │   │   (The core tensor processing library handling YOLOv26/COCO-SSD inference, NMS, and segmentation.)
+    │       (The core tensor processing library handling YOLOv26/COCO-SSD inference, NMS, and segmentation.)
     └── utils/
         └── nlpParser.ts
             (The NLP Translation Agent's core logic for parsing human intent into JSON tensor configs.)

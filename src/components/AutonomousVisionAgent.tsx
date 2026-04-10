@@ -15,7 +15,7 @@ const getCanvasTheme = (feedId: string) => {
 };
 
 // --- SOVEREIGN FIX: PHASE 2 POSTURAL HEURISTICS ---
-const derivePosturalState = (keypoints?: any[]): string => {
+const derivePosturalState = (keypoints?: any[], track?: any): string => {
   if (!keypoints || keypoints.length < 13) return '[NEUTRAL]';
 
   const kp = (idx: number) => keypoints[idx]?.score > 0.3 ? keypoints[idx] : null;
@@ -25,6 +25,21 @@ const derivePosturalState = (keypoints?: any[]): string => {
   const lElbow = kp(7); const rElbow = kp(8);
   const lWrist = kp(9); const rWrist = kp(10);
   const lHip = kp(11); const rHip = kp(12);
+
+  // [WAVE]: Trigger if one wrist moves back-and-forth for more than 1 second within the shoulder bounding box.
+  if (track && track.waveCount >= 3) return '[WAVE]';
+
+  // [POINT]: Trigger if one wrist is elevated above the shoulder and the index finger (keypoint 9 or 10) is extended more than 10 pixels from the palm.
+  // Note: Using elbow (7/8) as palm proxy since COCO 17-keypoint doesn't have palm/fingers
+  if (lWrist && lShoulder && lElbow) {
+    if (lWrist.y < lShoulder.y && Math.hypot(lWrist.x - lElbow.x, lWrist.y - lElbow.y) > 10) return '[POINT]';
+  }
+  if (rWrist && rShoulder && rElbow) {
+    if (rWrist.y < rShoulder.y && Math.hypot(rWrist.x - rElbow.x, rWrist.y - rElbow.y) > 10) return '[POINT]';
+  }
+
+  // [CELEBRATION]: Both wrists elevated > 1.5s with side-to-side oscillation
+  if (track && track.isCelebrating) return '[CELEBRATION]';
 
   // [JOY/LAUGHTER]: Wrists elevated above shoulders (Y-axis is inverted)
   if (lWrist && rWrist && lShoulder && rShoulder) {
@@ -97,13 +112,14 @@ const calculateIoU = (box1: number[], box2: number[]) => {
   return interArea / (box1Area + box2Area - interArea);
 };
 
-export const AutonomousVisionAgent = memo(function AutonomousVisionAgent({ feed, config, isPlaying, onPlay, onPause }: any) {
+export const AutonomousVisionAgent = memo(function AutonomousVisionAgent({ feed, config, isPlaying, onPlay, onPause, webcamStream }: any) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const lastTelemetryRef = useRef<number>(0); 
   const trackerRef = useRef<Map<string, any>>(new Map());
   const kinematicRef = useRef<Map<string, any>>(new Map());
+  const gestureRef = useRef<Map<string, any>>(new Map());
   const [model, setModel] = useState<any>(null);
   const [detections, setDetections] = useState<any[]>([]);
 
@@ -134,6 +150,12 @@ export const AutonomousVisionAgent = memo(function AutonomousVisionAgent({ feed,
   }, [isPlaying, onPause]);
 
   useEffect(() => {
+    if (webcamStream && videoRef.current) {
+      videoRef.current.srcObject = webcamStream;
+    }
+  }, [webcamStream]);
+
+  useEffect(() => {
     let frameId: number;
     const theme = getCanvasTheme(feed.id);
 
@@ -142,7 +164,10 @@ export const AutonomousVisionAgent = memo(function AutonomousVisionAgent({ feed,
         frameId = requestAnimationFrame(loop); return;
       }
       const video = videoRef.current; const canvas = canvasRef.current; const ctx = canvas.getContext('2d');
-      if (!ctx || video.videoWidth === 0) { frameId = requestAnimationFrame(loop); return; }
+      if (!ctx || video.videoWidth === 0 || video.videoHeight === 0 || video.readyState < 2) { 
+        frameId = requestAnimationFrame(loop); 
+        return; 
+      }
 
       const dets = await detectObjects(model, video, config);
       setDetections(dets);
@@ -157,6 +182,106 @@ export const AutonomousVisionAgent = memo(function AutonomousVisionAgent({ feed,
           const [bx, by, bw, bh] = det.bbox;
           det.color = getDominantColor(video, bx, by, bw, bh);
         });
+      }
+
+      // --- SOVEREIGN FIX: PHASE 2.5 GESTURE TRACKING (CAM_01) ---
+      if (feed.id.includes('CAM_01')) {
+        const now = Date.now();
+        const currentMap = gestureRef.current;
+        const newMap = new Map();
+        let nextId = currentMap.size > 0 ? Math.max(...Array.from(currentMap.keys()).map(k => parseInt(k))) + 1 : 0;
+
+        const people = dets.filter(d => d.class.toLowerCase() === 'person' || d.class.toLowerCase() === 'athlete');
+
+        people.forEach(p => {
+          let bestMatchId: string | null = null;
+          let bestIoU = 0.3;
+          currentMap.forEach((track, id) => {
+            const iou = calculateIoU(p.bbox, track.bbox);
+            if (iou > bestIoU) { bestIoU = iou; bestMatchId = id; }
+          });
+
+          let track;
+          if (bestMatchId !== null) {
+            track = currentMap.get(bestMatchId);
+            currentMap.delete(bestMatchId);
+            track.bbox = p.bbox; track.lastSeen = now;
+          } else {
+            track = { id: String(nextId++), bbox: p.bbox, lastSeen: now, wristHistory: [], celebrationHistory: [] };
+          }
+
+          if (p.keypoints) {
+            const rWrist = p.keypoints[10]; const lWrist = p.keypoints[9];
+            const rShoulder = p.keypoints[6]; const lShoulder = p.keypoints[5];
+            
+            let activeWrist = null;
+            if (rWrist?.score > 0.3 && rShoulder?.score > 0.3 && lShoulder?.score > 0.3) activeWrist = rWrist;
+            else if (lWrist?.score > 0.3 && rShoulder?.score > 0.3 && lShoulder?.score > 0.3) activeWrist = lWrist;
+
+            if (activeWrist && rShoulder && lShoulder) {
+              const minX = Math.min(rShoulder.x, lShoulder.x) - 30;
+              const maxX = Math.max(rShoulder.x, lShoulder.x) + 30;
+              if (activeWrist.x >= minX && activeWrist.x <= maxX) {
+                track.wristHistory.push({ x: activeWrist.x, time: now });
+              } else {
+                track.wristHistory = [];
+              }
+            } else {
+              track.wristHistory = [];
+            }
+
+            track.wristHistory = track.wristHistory.filter((h: any) => now - h.time <= 1200);
+
+            let directionChanges = 0;
+            let lastDir = 0;
+            for (let i = 1; i < track.wristHistory.length; i++) {
+              const dx = track.wristHistory[i].x - track.wristHistory[i-1].x;
+              if (Math.abs(dx) > 3) {
+                const dir = Math.sign(dx);
+                if (lastDir !== 0 && dir !== lastDir) directionChanges++;
+                lastDir = dir;
+              }
+            }
+            
+            const historySpan = track.wristHistory.length > 0 ? now - track.wristHistory[0].time : 0;
+            track.waveCount = historySpan > 1000 ? directionChanges : 0;
+
+            // --- CELEBRATION TRACKING ---
+            if (!track.celebrationHistory) track.celebrationHistory = [];
+            if (lWrist?.score > 0.3 && rWrist?.score > 0.3 && lShoulder?.score > 0.3 && rShoulder?.score > 0.3) {
+              if (lWrist.y < lShoulder.y && rWrist.y < rShoulder.y) {
+                track.celebrationHistory.push({ time: now, lx: lWrist.x, rx: rWrist.x });
+              } else {
+                track.celebrationHistory = [];
+              }
+            } else {
+              track.celebrationHistory = [];
+            }
+
+            track.celebrationHistory = track.celebrationHistory.filter((h: any) => now - h.time <= 2000);
+            const celebSpan = track.celebrationHistory.length > 0 ? now - track.celebrationHistory[0].time : 0;
+            
+            track.isCelebrating = false;
+            if (celebSpan >= 1500) {
+              const recent = track.celebrationHistory.filter((h: any) => now - h.time <= 500);
+              if (recent.length > 0) {
+                const lXs = recent.map((h: any) => h.lx);
+                const rXs = recent.map((h: any) => h.rx);
+                const lDiff = Math.max(...lXs) - Math.min(...lXs);
+                const rDiff = Math.max(...rXs) - Math.min(...rXs);
+                if (lDiff >= 5 || rDiff >= 5) track.isCelebrating = true;
+              }
+            }
+          }
+
+          newMap.set(track.id, track);
+          p.track = track;
+        });
+
+        currentMap.forEach((track, id) => {
+          if (now - track.lastSeen < 1000) newMap.set(id, track);
+        });
+        gestureRef.current = newMap;
       }
 
       // --- SOVEREIGN FIX: PHASE 4 RETAIL ANALYTICS ---
@@ -336,15 +461,13 @@ export const AutonomousVisionAgent = memo(function AutonomousVisionAgent({ feed,
         const [x, y, w, h] = det.bbox.map((v: number, i: number) => i % 2 === 0 ? v * sX : v * sY);
         
         // 1. RAW BOUNDING BOX
-        if (!feed.id.includes('CAM_02')) {
-          ctx.strokeStyle = theme.stroke; 
-          ctx.lineWidth = 2;
-          ctx.strokeRect(x, y, w, h);
-        }
+        ctx.strokeStyle = theme.stroke; 
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, w, h);
         
         // 2. RAW SKELETON (IF POSE DATA EXISTS)
         if (det.keypoints) {
-          ctx.strokeStyle = feed.id.includes('CAM_05') ? '#fde047' : theme.stroke; 
+          ctx.strokeStyle = feed.id.includes('CAM_05') ? '#673AB7' : theme.stroke; 
           ctx.lineWidth = 1.5;
           SKELETON_CONNECTIONS.forEach(([i, j]) => {
             const p1 = det.keypoints[i]; const p2 = det.keypoints[j];
@@ -356,18 +479,17 @@ export const AutonomousVisionAgent = memo(function AutonomousVisionAgent({ feed,
         }
         
         // 3. ARCHITECTURAL TELEMETRY LABELS
-        if (!feed.id.includes('CAM_02')) {
-          const confidence = Math.round(det.conf * 100);
+        const confidence = Math.round(det.conf * 100);
 
-          ctx.font = 'bold 10px "JetBrains Mono", monospace';
-          let labelMain = `${det.class.toUpperCase()} [${confidence}%]`;
-          let labelSub = '';
+        ctx.font = 'bold 10px "JetBrains Mono", monospace';
+        let labelMain = `${det.class.toUpperCase()} [${confidence}%]`;
+        let labelSub = '';
           
           // --- SOVEREIGN FIX: PHASE 2 UI OVERRIDE ---
           if (feed.id.includes('CAM_01')) {
             const normalizedClass = det.class.toLowerCase();
             if (normalizedClass === 'person' || normalizedClass === 'athlete') {
-              const posturalState = derivePosturalState(det.keypoints);
+              const posturalState = derivePosturalState(det.keypoints, det.track);
               labelMain = `HUMAN_NODE ${posturalState} [${confidence}%]`;
             }
           }
@@ -412,7 +534,6 @@ export const AutonomousVisionAgent = memo(function AutonomousVisionAgent({ feed,
             ctx.fillStyle = '#ffffff';
             ctx.fillText(labelSub, x + 6, labelY + 28);
           }
-        }
       });
       frameId = requestAnimationFrame(loop);
     };
@@ -421,7 +542,16 @@ export const AutonomousVisionAgent = memo(function AutonomousVisionAgent({ feed,
 
   return (
     <div ref={containerRef} className="relative w-full aspect-video bg-slate-950 rounded-xl overflow-hidden border border-white/5 group shadow-2xl">
-      <video ref={videoRef} src={feed.mp4Url} controls className="absolute inset-0 w-full h-full object-contain bg-black" loop playsInline crossOrigin="anonymous" />
+      <video 
+        ref={videoRef} 
+        src={webcamStream ? undefined : feed.mp4Url} 
+        controls={!webcamStream} 
+        className="absolute inset-0 w-full h-full object-contain bg-black" 
+        loop={!webcamStream} 
+        playsInline 
+        crossOrigin={webcamStream ? undefined : "anonymous"} 
+        muted={!!webcamStream}
+      />
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none z-10" />
       
       <div className="absolute top-3 right-3 w-44 bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-xl p-2.5 z-40 opacity-0 group-hover:opacity-100 transition-all">
