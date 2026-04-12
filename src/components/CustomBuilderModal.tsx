@@ -167,7 +167,7 @@ export function CustomBuilderModal({ isOpen, onClose }: CustomBuilderModalProps)
               Edge Vision Models
             </h3>
             <div className="grid grid-cols-1 gap-2">
-              {['YOLOv26 (Detect)', 'YOLOv26-Seg (Segment)', 'YOLOv26-Pose (Pose)'].map((type) => (
+              {['YOLOv26 (Detect)', 'YOLOv26-Seg (Segment)', 'YOLOv26-Pose (Pose)', 'YOLOv26-Face (Face)'].map((type) => (
                 <button
                   key={type}
                   onClick={() => onEngineSwitch(type as any)}

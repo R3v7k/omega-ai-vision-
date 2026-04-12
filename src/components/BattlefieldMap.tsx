@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import { Agent, SwarmMetrics, SwarmHistory } from '../hooks/useSwarmTelemetry';
+import { Agent, SwarmMetrics, SwarmHistory, AgentType } from '../hooks/useSwarmTelemetry';
 import { BattlefieldConsole } from './BattlefieldConsole';
 import { useChroniclerTelemetry } from '../hooks/useChroniclerTelemetry';
 import { ChroniclerAgent } from '../lib/ChroniclerAgent';
@@ -28,8 +28,11 @@ export const BattlefieldMap: React.FC<BattlefieldMapProps> = ({ agents, metrics,
   const simRef = useRef<any>(null);
   const ghostsRef = useRef<Map<string, any>>(new Map());
   const prevAgentsRef = useRef<Agent[]>([]);
+  const nodePositionsRef = useRef<Map<string, {x: number, y: number}>>(new Map());
   const { telemetry, updateTelemetry } = useChroniclerTelemetry();
   const chroniclerRef = useRef<ChroniclerAgent | null>(null);
+  const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; task: string; lifespan: number; id: string; status: string } | null>(null);
+  const [activeFilters, setActiveFilters] = useState<Set<AgentType>>(new Set(['Drone', 'Crawler', 'Walker']));
 
   useEffect(() => {
     if (!chroniclerRef.current) {
@@ -159,14 +162,24 @@ export const BattlefieldMap: React.FC<BattlefieldMapProps> = ({ agents, metrics,
 
     // 2. Prepare Nodes and Links
     const coreNodes = simRef.current.nodes().filter((n: any) => n.group === 'core');
-    const agentNodes = agents.map(a => {
-      const existing = simRef.current.nodes().find((n: any) => n.id === a.id);
-      return existing ? { ...existing, ...a, group: 'agent' } : { ...a, group: 'agent', x: width / 2, y: height / 2 };
-    });
-    const ghostNodes = Array.from(ghostsRef.current.values()).map(g => {
-      const existing = simRef.current.nodes().find((n: any) => n.id === g.id);
-      return existing ? { ...existing, ...g } : { ...g, x: width / 2, y: height / 2 };
-    });
+    const agentNodes = agents
+      .filter(a => activeFilters.has(a.type))
+      .map(a => {
+        const existing = simRef.current.nodes().find((n: any) => n.id === a.id);
+        const lastPos = nodePositionsRef.current.get(a.id);
+        if (existing) return { ...existing, ...a, group: 'agent' };
+        if (lastPos) return { ...a, group: 'agent', x: lastPos.x, y: lastPos.y };
+        return { ...a, group: 'agent', x: width / 2, y: height / 2 };
+      });
+    const ghostNodes = Array.from(ghostsRef.current.values())
+      .filter(g => activeFilters.has(g.type))
+      .map(g => {
+        const existing = simRef.current.nodes().find((n: any) => n.id === g.id);
+        const lastPos = nodePositionsRef.current.get(g.id);
+        if (existing) return { ...existing, ...g };
+        if (lastPos) return { ...g, x: lastPos.x, y: lastPos.y };
+        return { ...g, x: width / 2, y: height / 2 };
+      });
 
     const allNodes = [...coreNodes, ...agentNodes, ...ghostNodes];
     
@@ -219,7 +232,8 @@ export const BattlefieldMap: React.FC<BattlefieldMapProps> = ({ agents, metrics,
           .attr('fill', '#0f172a')
           .attr('stroke', '#334155')
           .attr('stroke-width', 2)
-          .attr('rx', 12);
+          .attr('rx', 12)
+          .style('transition', 'all 0.3s ease');
         el.append('text')
           .text(d.label)
           .attr('fill', '#94a3b8')
@@ -234,13 +248,15 @@ export const BattlefieldMap: React.FC<BattlefieldMapProps> = ({ agents, metrics,
           .attr('class', 'bg-circle')
           .attr('r', 18)
           .attr('fill', '#0f172a')
-          .attr('stroke-width', 2);
+          .attr('stroke-width', 2)
+          .style('transition', 'all 0.3s ease');
           
         el.append('text')
           .attr('class', 'icon')
           .attr('text-anchor', 'middle')
           .attr('dy', 5)
-          .attr('font-size', '16px');
+          .attr('font-size', '16px')
+          .style('transition', 'all 0.3s ease');
           
         el.append('text')
           .attr('class', 'label')
@@ -248,8 +264,72 @@ export const BattlefieldMap: React.FC<BattlefieldMapProps> = ({ agents, metrics,
           .attr('dy', 32)
           .attr('font-size', '10px')
           .attr('font-family', 'monospace')
-          .attr('fill', '#64748b');
+          .attr('fill', '#64748b')
+          .style('transition', 'all 0.3s ease');
       }
+
+      // Add hover events
+      el.on('mouseover', function(event) {
+        const node = d3.select(this);
+        const currentData: any = node.datum();
+        if (currentData.group === 'core') {
+          node.select('rect')
+            .attr('stroke', '#94a3b8')
+            .attr('fill', '#1e293b')
+            .attr('transform', 'scale(1.05)');
+        } else {
+          node.select('.bg-circle')
+            .attr('r', 22)
+            .attr('fill', '#1e293b');
+          node.select('.label')
+            .attr('fill', '#e2e8f0')
+            .attr('font-weight', 'bold');
+          node.select('.icon')
+            .attr('font-size', '20px');
+            
+          setTooltip({
+            visible: true,
+            x: event.clientX,
+            y: event.clientY,
+            task: currentData.task || 'Terminated',
+            lifespan: currentData.lifespan || 0,
+            id: currentData.id,
+            status: currentData.status || 'GHOST'
+          });
+        }
+      }).on('mousemove', function(event) {
+        const node = d3.select(this);
+        const currentData: any = node.datum();
+        if (currentData.group !== 'core') {
+          setTooltip(prev => prev ? {
+            ...prev,
+            x: event.clientX,
+            y: event.clientY,
+            lifespan: currentData.lifespan || 0,
+            status: currentData.status || 'GHOST'
+          } : prev);
+        }
+      }).on('mouseout', function() {
+        const node = d3.select(this);
+        const currentData: any = node.datum();
+        if (currentData.group === 'core') {
+          node.select('rect')
+            .attr('stroke', '#334155')
+            .attr('fill', '#0f172a')
+            .attr('transform', 'scale(1)');
+        } else {
+          node.select('.bg-circle')
+            .attr('r', 18)
+            .attr('fill', '#0f172a');
+          node.select('.label')
+            .attr('fill', '#64748b')
+            .attr('font-weight', 'normal');
+          node.select('.icon')
+            .attr('font-size', '16px');
+            
+          setTooltip(null);
+        }
+      });
     });
 
     const nodeMerge = nodeEnter.merge(nodeSelection as any);
@@ -269,22 +349,24 @@ export const BattlefieldMap: React.FC<BattlefieldMapProps> = ({ agents, metrics,
       label.text(d.id);
 
       if (d.group === 'ghost') {
-        const age = now - d.ghostSince;
-        const opacity = Math.max(0, 1 - age / 5000);
-        el.attr('opacity', opacity);
-        circle.attr('stroke', '#ef4444').attr('filter', 'url(#glow-red)');
-        icon.text('☠️').attr('fill', '#ef4444');
+        circle.attr('stroke', '#475569').attr('filter', null).attr('fill', 'rgba(71, 85, 105, 0.1)');
+        icon.text(d.type === 'Drone' ? '🚁' : d.type === 'Crawler' ? '🕷️' : '🚶').style('filter', 'grayscale(100%) opacity(50%)');
+        label.attr('fill', '#475569');
       } else {
         el.attr('opacity', 1);
         if (d.status === 'SPAWNING') {
-          circle.attr('stroke', '#fbbf24').attr('filter', 'url(#glow-amber)');
-          icon.text('⚡').attr('fill', '#fbbf24');
+          circle.attr('stroke', '#fbbf24').attr('filter', 'url(#glow-amber)').attr('fill', 'rgba(251, 191, 36, 0.1)');
+          icon.text('⚡').style('filter', null);
+          label.attr('fill', '#64748b');
         } else if (d.status === 'ACTIVE') {
-          circle.attr('stroke', '#22d3ee').attr('filter', 'url(#glow-cyan)');
-          icon.text(d.type === 'Drone' ? '🚁' : d.type === 'Crawler' ? '🕷️' : '🚶').attr('fill', '#22d3ee');
+          circle.attr('stroke', '#22d3ee').attr('filter', 'url(#glow-cyan)').attr('fill', 'rgba(34, 211, 238, 0.1)');
+          icon.text(d.type === 'Drone' ? '🚁' : d.type === 'Crawler' ? '🕷️' : '🚶').style('filter', null);
+          label.attr('fill', '#64748b');
         } else if (d.status === 'PURGING') {
-          circle.attr('stroke', '#ef4444').attr('filter', 'url(#glow-red)');
-          icon.text('🔥').attr('fill', '#ef4444');
+          el.attr('opacity', 0.5);
+          circle.attr('stroke', '#475569').attr('filter', null).attr('fill', 'rgba(71, 85, 105, 0.1)');
+          icon.text(d.type === 'Drone' ? '🚁' : d.type === 'Crawler' ? '🕷️' : '🚶').style('filter', 'grayscale(100%)');
+          label.attr('fill', '#475569');
         }
       }
     });
@@ -298,10 +380,13 @@ export const BattlefieldMap: React.FC<BattlefieldMapProps> = ({ agents, metrics,
         .attr('y2', (d: any) => d.target.y);
 
       nodeMerge
-        .attr('transform', (d: any) => `translate(${d.x},${d.y})`);
+        .attr('transform', (d: any) => {
+          nodePositionsRef.current.set(d.id, { x: d.x, y: d.y });
+          return `translate(${d.x},${d.y})`;
+        });
     });
 
-  }, [agents]);
+  }, [agents, activeFilters]);
 
   return (
     <div ref={containerRef} className="w-full h-full bg-[#0f172a] relative overflow-hidden rounded-xl border border-slate-800 shadow-2xl">
@@ -331,11 +416,63 @@ export const BattlefieldMap: React.FC<BattlefieldMapProps> = ({ agents, metrics,
       `}</style>
       <svg ref={svgRef} className="w-full h-full absolute inset-0" />
       
+      {/* Tooltip */}
+      {tooltip && tooltip.visible && (
+        <div 
+          className="fixed z-[1000] pointer-events-none bg-slate-900/95 border border-cyan-500/50 p-3 rounded-lg shadow-[0_0_15px_rgba(34,211,238,0.2)] backdrop-blur-md transform -translate-x-1/2 -translate-y-[calc(100%+20px)] transition-opacity duration-150"
+          style={{ left: tooltip.x, top: tooltip.y }}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <span className={`w-2 h-2 rounded-full ${tooltip.status === 'ACTIVE' ? 'bg-cyan-400 animate-pulse' : tooltip.status === 'SPAWNING' ? 'bg-amber-400 animate-pulse' : 'bg-red-500'}`} />
+            <div className="text-cyan-400 font-mono text-xs font-bold">{tooltip.id}</div>
+          </div>
+          <div className="text-slate-300 font-mono text-[10px] uppercase tracking-wider mb-1 border-b border-slate-700/50 pb-1">Task: {tooltip.task}</div>
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-slate-400 font-mono text-[10px]">Lifespan</span>
+            <span className={`font-mono text-[10px] font-bold ${tooltip.lifespan > 50 ? 'text-emerald-400' : tooltip.lifespan > 20 ? 'text-amber-400' : 'text-red-400'}`}>
+              {Math.round(tooltip.lifespan)}%
+            </span>
+          </div>
+          <div className="w-full h-1 bg-slate-800 rounded-full mt-1 overflow-hidden">
+            <div 
+              className={`h-full rounded-full transition-all duration-300 ${tooltip.lifespan > 50 ? 'bg-emerald-400' : tooltip.lifespan > 20 ? 'bg-amber-400' : 'bg-red-400'}`}
+              style={{ width: `${Math.max(0, Math.min(100, tooltip.lifespan))}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       <BattlefieldConsole logs={logs} metrics={metrics} activeCount={agents.filter(a => a.status === 'ACTIVE').length} history={history} />
       <MissionArchive telemetry={telemetry} />
       <SwarmCommandCenter agents={agents} />
 
       {/* Overlay UI */}
+      <div className="absolute top-4 left-4 z-50 flex gap-3">
+        {(['Drone', 'Crawler', 'Walker'] as AgentType[]).map(type => {
+          const isActive = activeFilters.has(type);
+          return (
+            <button
+              key={type}
+              onClick={() => {
+                setActiveFilters(prev => {
+                  const next = new Set(prev);
+                  if (next.has(type)) next.delete(type);
+                  else next.add(type);
+                  return next;
+                });
+              }}
+              className={`px-3 py-1.5 rounded-md font-mono text-xs font-bold transition-all duration-300 border flex items-center gap-2 ${
+                isActive 
+                  ? 'bg-slate-800/80 border-cyan-500/50 text-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.2)]' 
+                  : 'bg-slate-900/50 border-slate-700/50 text-slate-500 hover:border-slate-600 hover:text-slate-400'
+              } backdrop-blur-md`}
+            >
+              <span className="text-sm">{type === 'Drone' ? '🚁' : type === 'Crawler' ? '🕷️' : '🚶'}</span>
+              {type}
+            </button>
+          );
+        })}
+      </div>
       <div className="absolute bottom-4 left-4 pointer-events-none">
         <h2 className="text-cyan-400 font-mono text-sm font-bold tracking-widest uppercase">Omega Battlefield</h2>
         <p className="text-slate-500 font-mono text-xs mt-1">Decentralized Neural Array</p>

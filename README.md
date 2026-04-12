@@ -12,6 +12,17 @@ We do not just watch the data. We *deploy the swarm*.
 
 ---
 
+## 📖 About the App
+**OMEGA Ai Vision** is a next-generation, decentralized AI monitoring and swarm intelligence platform. Built for high-stakes environments, it transforms raw video feeds and telemetry data into actionable, real-time intelligence. By leveraging advanced kinematic tracking, natural language processing, and force-directed data visualization, the application provides operators with an unprecedented level of situational awareness.
+
+### 🎯 End Goals & Vision
+The ultimate trajectory of the SAVIS architecture is defined by three core end-goals:
+1. **Predictive Autonomy**: Transitioning from reactive monitoring to predictive behavioral modeling, allowing the system to anticipate human and environmental anomalies before they occur.
+2. **Decentralized Swarm Intelligence**: Scaling the "Neural Array" so that thousands of micro-agents (Drones, Crawlers, Walkers) can autonomously collaborate, cross-reference data across nodes, and self-heal without human intervention.
+3. **Sovereign Data Synthesis**: Ensuring all intelligence is processed, reasoned, and archived locally and securely, culminating in automated, highly classified mission reports that require zero manual data entry.
+
+---
+
 ## ⚙️ Core Capabilities & Unique Tools
 
 ### 1. VisionCore: Live Kinematic Analytics

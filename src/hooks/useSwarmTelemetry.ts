@@ -53,7 +53,13 @@ export const useSwarmTelemetry = () => {
       setAgents(prev => {
         // 1. Update existing agents
         let next = prev.map(agent => {
-          const decayRate = agent.status === 'PURGING' ? 15 : (Math.random() * 4 + 1);
+          let decayRate = 0;
+          if (agent.status === 'SPAWNING') {
+            decayRate = 5;
+          } else if (agent.status === 'PURGING') {
+            decayRate = 15;
+          }
+          
           const newLifespan = Math.max(0, agent.lifespan - decayRate);
           
           let newStatus = agent.status;
@@ -75,24 +81,6 @@ export const useSwarmTelemetry = () => {
           }
           return true;
         }); // Remove purged agents
-
-        // 2. Spawning logic (maintain a swarm of 8-15 agents)
-        if (next.length < 12 && Math.random() > 0.4) {
-          const types: AgentType[] = ['Drone', 'Crawler', 'Walker'];
-          const tasks = ['Reconnaissance', 'Data Extraction', 'Perimeter Defense', 'Target Tracking', 'Signal Relay'];
-          const nodes = ['Node_01', 'Node_02', 'Node_03', 'Node_04', 'Node_05'];
-          
-          const newAgent: Agent = {
-            id: `AGT-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
-            type: types[Math.floor(Math.random() * types.length)],
-            status: 'SPAWNING',
-            task: tasks[Math.floor(Math.random() * tasks.length)],
-            targetNode: nodes[Math.floor(Math.random() * nodes.length)],
-            lifespan: 100,
-          };
-          next.push(newAgent);
-          newLogs.push(`[${new Date().toLocaleTimeString()}] [SPAWNING]> [Assembling] [${newAgent.id}]`);
-        }
 
         return next;
       });

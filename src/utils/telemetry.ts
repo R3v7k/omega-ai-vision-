@@ -1,4 +1,4 @@
-import { eventBus } from './EventBus';
+import { eventBus } from '../lib/EventBus';
 
 class OTELCollector {
   private static isInitialized = false;

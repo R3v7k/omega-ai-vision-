@@ -29,7 +29,7 @@ export function LiveMonitor({ isBuilderOpen, setIsBuilderOpen }: LiveMonitorProp
 
   // --- SOVEREIGN FIX: DECENTRALIZED NEURAL ASSIGNMENT ---
   const getNodeModel = (feedId: string) => {
-    if (feedId === 'CAM_01') return 'YOLOv26-Pose (Pose)'; // Human Analytics -> Skeletal Math
+    if (feedId === 'CAM_01') return 'YOLOv26-Face (Face)'; // Human Analytics -> Facial Landmarks
     if (feedId === 'CAM_02') return 'YOLOv26-Seg (Segment)'; // Animal Behavior -> Polygon Masks
     if (feedId === 'CAM_03') return 'YOLOv26 (Detect)'; // Urban Traffic -> Fast NMS-Free
     if (feedId === 'CAM_04') return 'COCO-SSD'; // Retail Analytics -> Spatial Zonal Tracking
